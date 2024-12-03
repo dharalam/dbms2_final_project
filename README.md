@@ -1,1 +1,3 @@
-# dbms2_final_project
+# CS 562 Final Project
+Dimitrios Haralampopoulos & Thys Vanderschoot
+Based on the python skeleton code shown in class
