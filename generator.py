@@ -8,7 +8,7 @@ def main():
     file (e.g. _generated.py) and then run.
     """
 
-    body = """
+    body = f"""
     for row in cur:
         if row['quant'] > 10:
             _global.append(row)
