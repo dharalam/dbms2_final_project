@@ -43,7 +43,8 @@ def query():
     cur.close()
     conn.close()
     
-    df = pl.DataFrame(tuples, schema={{}})
+    df = pl.DataFrame(tuples, schema={{'cust': pl.String, 'prod': pl.String, 'day': pl.Int32, 'month': pl.Int32, 'year': pl.Int32, 'state': pl.String, 'quant': pl.Int32}})
+    
     
     # THIS IS WHERE THE GENERATED CODE GOES!
     {body}

@@ -2,6 +2,7 @@
 Based on the Phi Operator structure, construct python queries to handle the row selection.
 The result of the queries should be combined to create the result of the full ESQL query.
 '''
+import polars as pl
 
 class op2python:
     def __init__(self, phiOp):
@@ -20,6 +21,9 @@ class op2python:
         if self.queries is not None and len(self.queries) > 0:
             return self.queries
         pass
+
+    
+    
     
     
     
