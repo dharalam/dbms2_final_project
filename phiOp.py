@@ -15,12 +15,12 @@ where each clause is separated by a newline for our parsing convenience
 '''
 
 def grab_aggregates(condition):
-    regex_pattern = r"(sum|max|min|avg|count)\((.*)\)"
+    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
     matches = regex.findall(regex_pattern, condition)
-    return [match.group(0) for match in matches] if matches else None
+    return matches
 
 def remove_from_agg(agg):
-    regex_pattern = r"(sum|max|min|avg|count)\((.*)\)"
+    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
     match = regex.match(regex_pattern, agg)
     if match is not None:
         return (match.group(1), match.group(2))
@@ -34,6 +34,13 @@ def isolate_gv(gv):
         return (match.group(1), match.group(2))
     else:
         return (gv, None)
+  
+def fTupleToStr(tuple):
+  retString = f"{tuple[0]}_{tuple[1].replace(".", "_").replace("(", "").replace(")", "")}"
+  if (len(retString.split("_")) == 2):
+    func, attr = retString.split("_")
+    retString = f"{func}_GV0_{attr}"
+  return retString
 
 def parse_query(query):
     # Initialize dictionary to store the parameters
@@ -54,28 +61,12 @@ def parse_query(query):
             raise ValueError("Invalid query format")
     
     # Extract the parameters from the conditions and store them in the dictionary
-    phi_op["S"] = list(map(statements["select"].split(","), lambda x: x.strip()))
-    phi_op["N"] = len(set([isolate_gv(remove_from_agg(gv)[1])[0] for gv in phi_op["S"]]))
-    phi_op["V"] = list(map(statements["group by"].split(":")[0].split(","), lambda x: x.strip()))
-    phi_op["F"] = list(grab_aggregates(statements["select"]))
-    phi_op["R"] = list(map(statements["suchthat"].split(","), lambda x: x.strip()))
-    phi_op["H"] = list(map(statements["having"].split(","), lambda x: x.strip()))
+    phi_op["S"] = list(map(lambda x: x.strip(), statements["select"].split(",")))
+    phi_op["N"] = 1 + len(statements["group by"].split(":")[1].split(","))
+    phi_op["V"] = list(map(lambda x: x.strip(), statements["group by"].split(":")[0].split(",")))
+    phi_op["F"] = list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))
+    phi_op["R"] = list(map(lambda x: x.strip(), statements["suchthat"].split(",")))
+    phi_op["H"] = list(map(lambda x: x.strip(), statements["having"].split(",")))
     
     # Return the dictionary of parameters
     return phi_op
-
-
-
-
-
-
-
-    
-
-
-
-
-
-    
-    
-
