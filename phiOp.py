@@ -36,16 +36,23 @@ def isolate_gv(gv):
         return (gv, None)
   
 def fTupleToStr(tuple):
-  retString = f"{tuple[0]}_{tuple[1].replace(".", "_").replace("(", "").replace(")", "")}"
+  retString = f"{tuple[0]}_{tuple[1].replace('.', '_').replace('(', '').replace(')', '')}"
   if (len(retString.split("_")) == 2):
     func, attr = retString.split("_")
     retString = f"{func}_GV0_{attr}"
   return retString
 
+def replace_aggregate(condition):
+    aggregate = grab_aggregates(condition)
+    if aggregate is not None and len(aggregate) > 0:
+        return fTupleToStr(aggregate[0])
+    else:
+        return fTupleToStr(("None", condition))
+
 def parse_query(query):
     # Initialize dictionary to store the parameters
     phi_op = {"S": None, "N": None, "V": None, "F": None, "R": None, "H": None}
-    statements = {"select": None, "from": None, "group by": None, "suchthat": None, "having": None}
+    statements = {"select": "", "from": "", "group by": "", "suchthat": "", "having": ""}
     
     # Split the query into individual conditions
     query_components = query.split("\n")
@@ -61,7 +68,7 @@ def parse_query(query):
             raise ValueError("Invalid query format")
     
     # Extract the parameters from the conditions and store them in the dictionary
-    phi_op["S"] = list(map(lambda x: x.strip(), statements["select"].split(",")))
+    phi_op["S"] = list(map(lambda x: replace_aggregate(x.strip()), statements["select"].split(",")))
     phi_op["N"] = 1 + len(statements["group by"].split(":")[1].split(","))
     phi_op["V"] = list(map(lambda x: x.strip(), statements["group by"].split(":")[0].split(",")))
     phi_op["F"] = list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))
