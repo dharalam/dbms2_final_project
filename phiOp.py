@@ -15,12 +15,12 @@ where each clause is separated by a newline for our parsing convenience
 '''
 
 def grab_aggregates(condition):
-    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
+    regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
     matches = regex.findall(regex_pattern, condition)
     return matches
 
 def remove_from_agg(agg):
-    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
+    regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
     match = regex.match(regex_pattern, agg)
     if match is not None:
         return (match.group(1), match.group(2))

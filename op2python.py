@@ -4,6 +4,7 @@ The result of the queries should be combined to create the result of the full ES
 '''
 import polars as pl
 import regex as re
+import phiOp as po
 
 class op2python:
     def __init__(self, phiOp):
@@ -13,7 +14,8 @@ class op2python:
         self.F = phiOp["F"]
         self.R = phiOp["R"]
         self.H = phiOp["H"]
-        self.queries = []
+        self.queries = {}
+        self.gvs_in_queries = set()
     
     def construct_queries(self, df:pl.DataFrame):
         # Construct queries based on the Phi Operator structure
@@ -38,27 +40,29 @@ class op2python:
             res = {}
             kws = {}
             for expr in st:
-                keywords = re.findall(r"\b(?:and|or|not)\b", expr, re.IGNORECASE)
+                keywords = re.findall(r"\b(?:and|or|not)\b", expr, re.IGNORECASE) # splits keywords like and, or, and not
                 if keywords is not None and len(keywords) > 0:
                     for keyword in keywords:
-                        expr = expr.replace(keyword, "|")
+                        expr = expr.replace(keyword, "|") # ensures we can get our components from the conditions by giving us something consistent to split on
                 matches = re.findall(r"([^\s\|]+)\s+([^\s\|]+)\s+([^\s\|]+)", expr)
                 if matches is not None:
                     for match in matches:
                         gv = None
                         if len(match) == 3:
-                            col, op, val = match
-                            get_gv = re.findall(r"(.*)\.(.*)", col)
+                            col, op, val = match # gets the column, operator, and value to check against from the match groups
+                            get_gv = re.findall(r"(.*)\.(.*)", col) # checks to see if there is a grouping variable assigned
                             if get_gv is not None and len(get_gv) > 0:
                                 gv, col = get_gv[0]
                             else:
-                                gv = "GV0"
+                                gv = "GV0" # otherwise assume GV0
                             if gv not in res:
-                                res[gv] = [(col, op, val)]
+                                res[gv] = {} # dict by gv primary
+                            if col not in res[gv]:
+                                res[gv][col] = [(op, val)] # for each gv, dict by column name so that we can perform aggregates if necessary even without a condition
                             else:
-                                res[gv].append((col, op, val))
+                                res[gv][col].append((op, val))
                     if gv not in kws:
-                        kws[gv] = keywords
+                        kws[gv] = keywords # get the keywords per gv as well
             return res, kws
 
         # begin constructing the queries
@@ -71,7 +75,7 @@ class op2python:
         print(f"ST: {st_conds}")
         print(f"ST KW: {st_kws}")
         
-        for gv, conds in st_conds.items():
+        for gv, condict in st_conds.items():
             if gv not in gvs:
                 return KeyError(f"GV {gv} not in GVs")
             
@@ -79,12 +83,16 @@ class op2python:
 
             filter_query = "df.filter("
             
-            if len(conds) > 1:
-                for (index, (col, op, val)) in enumerate(conds):
+            index = 0
+            
+            for (i, (col, conds)) in enumerate(condict.items()):
+                stillAgged = po.grab_aggregates(col)
+                if stillAgged is not None and len(stillAgged) > 0:
+                    col = stillAgged[0][1]
+                for op, val in conds:
                     filter_query += f"(pl.col('{col}') {operator_map[op]} {val})"
                     filter_query += f" {operator_map[gvkws[index]]} " if index < len(gvkws) else ""
-            else:
-                filter_query += f"(pl.col('{conds[0][0]}') {operator_map[conds[0][1]]} {conds[0][2]})"
+                    index+=1
             
             filter_query += ")"
                 
@@ -92,32 +100,64 @@ class op2python:
             
             gvdf = eval(filter_query)
             
-            groupby_query = f"gvdf.group_by({self.V}).agg(["
+            self.queries[gv] = gvdf
+            self.gvs_in_queries.add(gv)
+
+        for gv in gvs:
+            if gv not in self.gvs_in_queries:
+                self.queries[gv] = df
+                
+            groupby_query = f"gvdf.with_columns(["
             
             for (index, (agg, col)) in enumerate(gvs[gv]):
-                groupby_query += f"pl.{agg}('{col}')" if agg != "None" else f"pl.col('{col}')"
-                alias = f".alias('{agg}_{gv}_{col}')" if agg != "None" else ""
+                groupby_query += f"pl.col('{col}')" 
+                groupby_query += f".{agg}()" if agg != "None" else ""
+                alias = f".alias('{agg}_{gv}_{col}')" if agg != "None" else f".alias('{gv}_{col}')"
                 print(f"Alias: {alias}")
+                if agg == "None":
+                    groupby_query += alias
+                    if index < len(gvs[gv]) - 1:
+                        groupby_query += ", "
+                    continue
+                groupby_query += f".over({self.V})" if index < len(gvs[gv]) else ""
                 groupby_query += alias
                 if index < len(gvs[gv]) - 1:
                     groupby_query += ", "
+                
 
             groupby_query += "])"
             
             print(groupby_query)
             
+            gvdf = self.queries[gv]
+            
             gvdf = eval(groupby_query)
             
-            print(f"{gv} GVDF: {gvdf.head()}")
+            self.queries[gv] = gvdf
             
-            self.queries.append(gvdf)
+            print(f"{gv} GVDF: {gvdf.head()}")
         
-        frame = self.queries.pop(0)
+        frame = self.queries.pop("GV0")
+        query_keys = list(self.queries.keys())
+        
         if len(self.queries) > 0:
             while len(self.queries) > 0:
-                frame = frame.join(self.queries.pop(0), how="inner", on=self.V)
+                suff = query_keys.pop(0)
+                to_join = self.queries.pop(suff)
+                frame = frame.join(to_join, how="inner", on=self.V, suffix=f"_{suff}")
+        
+        def convert_col_name(col_name):
+            agg, gv, col = col_name.split("_")
+            if agg =="None":
+                if gv == "GV0":
+                    gv = ""
+                agg = ""
+            return "_".join(list(filter(lambda x: x != "", [agg, gv, col])))
+            
+        to_select = list(map(convert_col_name, self.S))
 
-        return frame
+
+        return frame.select(to_select).unique()
 
 
 

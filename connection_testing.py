@@ -13,7 +13,7 @@ suchthat R.Date > "96/05/31" AND R.Date < "96/09/01"
 having sum(R.Length)*3 > sum(Length) AND R.Length = max(R.Length)"""
 
 
-sales_query = """select prod, cust, sum(x.quant), sum(y.quant)
+sales_query = """select prod, cust, state, sum(quant), sum(x.quant), sum(y.quant)
 from sales
 group by prod, cust: x, y
 suchthat x.state = 'NY' and x.quant > 15, y.state = 'NJ'"""
