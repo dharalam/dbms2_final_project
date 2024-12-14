@@ -67,9 +67,10 @@ class op2python:
 
         # begin constructing the queries
                     
-        gvs = split_gvs(list(set(self.F) | set(self.S)))
+        gvs = split_gvs(list(set(self.F) | set(self.S))) # get full set of unique gvs with their aggs and columns from select and aggregate parameter 
         
-        st_conds, st_kws = parse_suchthat(self.R)
+        st_conds, st_kws = parse_suchthat(self.R) # gets the conditions and logical operators from the such that clause
+
         
         print(f"GVs: {gvs}")
         print(f"ST: {st_conds}")
@@ -83,28 +84,29 @@ class op2python:
 
             filter_query = "df.filter("
             
-            index = 0
+            index = 0 # global index for logical operators
             
             for (i, (col, conds)) in enumerate(condict.items()):
-                stillAgged = po.grab_aggregates(col)
+                stillAgged = po.grab_aggregates(col) # sometimes there are cases that GV0 columns that are being aggregated are used in conditions
+
                 if stillAgged is not None and len(stillAgged) > 0:
-                    col = stillAgged[0][1]
+                    col = stillAgged[0][1] # change the column name to reflect the actual col name
                 for op, val in conds:
                     filter_query += f"(pl.col('{col}') {operator_map[op]} {val})"
-                    filter_query += f" {operator_map[gvkws[index]]} " if index < len(gvkws) else ""
+                    filter_query += f" {operator_map[gvkws[index]]} " if index < len(gvkws) else "" # makes sure we add the correct number of logical operators. It is order-based however.
                     index+=1
             
             filter_query += ")"
                 
             print(filter_query)
             
-            gvdf = eval(filter_query)
+            gvdf = eval(filter_query) # eval query
             
-            self.queries[gv] = gvdf
-            self.gvs_in_queries.add(gv)
+            self.queries[gv] = gvdf # stuff into queries dict
+            self.gvs_in_queries.add(gv) # add the gv that we filtered to this set
 
         for gv in gvs:
-            if gv not in self.gvs_in_queries:
+            if gv not in self.gvs_in_queries: # if we haven't filtered this gv, we add a copy of df to the queries dict
                 self.queries[gv] = df
                 
             groupby_query = f"gvdf.with_columns(["
@@ -112,14 +114,9 @@ class op2python:
             for (index, (agg, col)) in enumerate(gvs[gv]):
                 groupby_query += f"pl.col('{col}')" 
                 groupby_query += f".{agg}()" if agg != "None" else ""
-                alias = f".alias('{agg}_{gv}_{col}')" if agg != "None" else f".alias('{gv}_{col}')"
+                alias = f".alias('{agg}_{gv}_{col}')" if agg != "None" else f".alias('{gv}_{col}')" # alias everything that we care about to distinguish between gv columns
                 print(f"Alias: {alias}")
-                if agg == "None":
-                    groupby_query += alias
-                    if index < len(gvs[gv]) - 1:
-                        groupby_query += ", "
-                    continue
-                groupby_query += f".over({self.V})" if index < len(gvs[gv]) else ""
+                groupby_query += f".over({self.V})" if agg!="None" and index < len(gvs[gv]) else "" # ensures we only grouby when we need to (aggregates only)
                 groupby_query += alias
                 if index < len(gvs[gv]) - 1:
                     groupby_query += ", "
@@ -129,24 +126,25 @@ class op2python:
             
             print(groupby_query)
             
-            gvdf = self.queries[gv]
+            gvdf = self.queries[gv] # retrieve stashed query
             
-            gvdf = eval(groupby_query)
-            
-            self.queries[gv] = gvdf
+            gvdf = eval(groupby_query) # apply groupby query
+
+            self.queries[gv] = gvdf # restash
             
             print(f"{gv} GVDF: {gvdf.head()}")
         
-        frame = self.queries.pop("GV0")
+        frame = self.queries.pop("GV0") # start with GV0 for convenience and convention
         query_keys = list(self.queries.keys())
         
         if len(self.queries) > 0:
             while len(self.queries) > 0:
                 suff = query_keys.pop(0)
                 to_join = self.queries.pop(suff)
-                frame = frame.join(to_join, how="inner", on=self.V, suffix=f"_{suff}")
+                frame = frame.join(to_join, how="inner", on=self.V, suffix=f"_{suff}") # inner join and duplicate column names are suffixed with _{suff} to distinguish between GVs
+
         
-        def convert_col_name(col_name):
+        def convert_col_name(col_name): # converts column names that don't have aggs or have no agg and are GV0 to the form we want them in
             agg, gv, col = col_name.split("_")
             if agg =="None":
                 if gv == "GV0":
@@ -157,7 +155,7 @@ class op2python:
         to_select = list(map(convert_col_name, self.S))
 
 
-        return frame.select(to_select).unique()
+        return frame.select(to_select).unique() # ensures that we get no duplicate rows, and selects only the columns we want
 
 
 
