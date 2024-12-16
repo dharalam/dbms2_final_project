@@ -319,6 +319,9 @@ class op2python:
                 suff = to_join.pop(0)
                 other = self.queries.pop(suff)
                 frame = frame.join(other, how="inner", on=self.V, suffix=f"_{suff}").unique() # inner join and duplicate column names are suffixed with _{suff} to distinguish between GVs
+                curcols = set(list(frame.columns)) & (condcols | set(to_select) | set(list(map(self.extract_col_from_select, to_select))))
+                frame = frame.select(list(curcols))
+                
         
        
         
