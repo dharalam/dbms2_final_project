@@ -1,0 +1,5 @@
+select prod, cust, sum(quant), sum(x.quant), sum(y.quant), avg(quant)
+from sales
+group by prod, cust: x, y
+suchthat x.state = 'NY' and x.quant > 15, y.state = 'NJ'
+having sum(x.quant) > sum(y.quant) and sum(y.quant) >= avg(quant)

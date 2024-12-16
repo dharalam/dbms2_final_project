@@ -1,5 +1,6 @@
 import subprocess
-
+import sys
+import os
 
 def main(query: str):
     """
@@ -13,8 +14,6 @@ def main(query: str):
     tmp = f"""
 import os
 import psycopg2
-import psycopg2.extras
-import tabulate
 import polars as pl
 import phiOp as po
 import op2python as o2p
@@ -63,5 +62,29 @@ if "__main__" == __name__:
 
 
 if "__main__" == __name__:
-    query = 'select prod, cust, state, sum(quant), sum(x.quant), sum(y.quant)\nfrom sales\ngroup by prod, cust: x, y\nsuchthat x.state = "NY" and x.quant > 15, y.state = "NJ"'
-    main(query)
+    
+    if len(sys.argv) != 2:
+        print("Usage: python generator.py <query.txt | custom>")
+        print("query.txt - A file containing the query to be executed")
+        print("custom - A prompt will be displayed for the user to enter the query manually")
+        exit(1)
+    else:
+        if os.path.isfile(sys.argv[1]):
+            
+            # read contents of file
+            
+            with open(sys.argv[1], 'r') as file:
+                query = file.read()
+        elif sys.argv[1] == 'custom':
+            query = ""
+            print('Enter your query here. Press enter for newline, and if there are no more lines left in the query, type END.')
+            no_of_lines = 6    
+            for i in range(no_of_lines):
+                line = input()
+                if line == 'END':
+                    break
+                query+= line+"\n"
+        
+        query = query.strip()
+
+        main(query)

@@ -17,7 +17,8 @@ where each clause is separated by a newline for our parsing convenience
 def grab_aggregates(condition):
     regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
     matches = regex.findall(regex_pattern, condition)
-    return matches
+    if matches is not None:
+        return matches
 
 def remove_from_agg(agg):
     regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
@@ -51,8 +52,8 @@ def replace_aggregate(condition):
 
 def parse_query(query):
     # Initialize dictionary to store the parameters
-    phi_op = {"S": None, "N": None, "V": None, "F": None, "R": None, "H": None}
-    statements = {"select": "", "from": "", "group by": "", "suchthat": "", "having": ""}
+    phi_op = {"S": None, "N": None, "V": None, "F": None, "R": None, "H": None, "W": None}
+    statements = {"select": "", "from": "", "where": "", "group by": "", "suchthat": "", "having": ""}
     
     # Split the query into individual conditions
     query_components = query.split("\n")
@@ -69,11 +70,12 @@ def parse_query(query):
     
     # Extract the parameters from the conditions and store them in the dictionary
     phi_op["S"] = list(map(lambda x: replace_aggregate(x.strip()), statements["select"].split(",")))
+    phi_op["W"] = statements["where"]
     phi_op["N"] = 1 + len(statements["group by"].split(":")[1].split(","))
     phi_op["V"] = list(map(lambda x: x.strip(), statements["group by"].split(":")[0].split(",")))
-    phi_op["F"] = list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))
+    phi_op["F"] = list(set(list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))))
     phi_op["R"] = list(map(lambda x: x.strip(), statements["suchthat"].split(",")))
-    phi_op["H"] = list(map(lambda x: x.strip(), statements["having"].split(",")))
+    phi_op["H"] = statements["having"]
     
     # Return the dictionary of parameters
     return phi_op

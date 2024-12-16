@@ -1,8 +1,6 @@
 
 import os
 import psycopg2
-import psycopg2.extras
-import tabulate
 import polars as pl
 import phiOp as po
 import op2python as o2p
@@ -29,10 +27,11 @@ def query():
     
     
     # THIS IS WHERE THE GENERATED CODE GOES!
-    phi = po.parse_query('''select prod, cust, state, sum(quant), sum(x.quant), sum(y.quant)
+    phi = po.parse_query('''select prod, cust, sum(quant), sum(x.quant), sum(y.quant), avg(quant)
 from sales
 group by prod, cust: x, y
-suchthat x.state = "NY" and x.quant > 15, y.state = "NJ"''')
+suchthat x.state = 'NY' and x.quant > 15, y.state = 'NJ'
+having sum(x.quant) > sum(y.quant) and sum(y.quant) >= avg(quant)''')
     
     opInstance = o2p.op2python(phi)
     

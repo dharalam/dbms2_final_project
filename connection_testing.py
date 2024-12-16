@@ -13,15 +13,17 @@ suchthat R.Date > "96/05/31" AND R.Date < "96/09/01"
 having sum(R.Length)*3 > sum(Length) AND R.Length = max(R.Length)"""
 
 
-sales_query = """select prod, cust, state, sum(quant), sum(x.quant), sum(y.quant)
+sales_query = """select prod, month, avg(x.quant), avg(y.quant)
 from sales
-group by prod, cust: x, y
-suchthat x.state = 'NY' and x.quant > 15, y.state = 'NJ'"""
+where year = 2016
+group by prod, month: x, y
+suchthat x.prod = GV0.prod and x.month = GV0.month-1, y.prod = GV0.prod and y.month > GV0.month"""
 
 queryParsed = phiOp.parse_query(sales_query)
 
 print(f"S: {queryParsed['S']}")
 print(f"N: {queryParsed['N']}")
+print(f"W: {queryParsed['W']}")
 print(f"V: {queryParsed['V']}")
 print(f"F: {queryParsed['F']}")
 print(f"R: {queryParsed['R']}")
@@ -51,6 +53,7 @@ def query():
   
   operator = o2p.op2python(queryParsed)
   result = operator.construct_queries(df=df)
+  result.sort("prod")
   
   print(result)
 
