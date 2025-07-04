@@ -15,12 +15,13 @@ where each clause is separated by a newline for our parsing convenience
 '''
 
 def grab_aggregates(condition):
-    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
+    regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
     matches = regex.findall(regex_pattern, condition)
-    return matches
+    if matches is not None:
+        return matches
 
 def remove_from_agg(agg):
-    regex_pattern = r"(sum|max|min|avg|count)(\([^\)]*\))"
+    regex_pattern = r"(sum|max|min|avg|count)\(([^\)]*)\)"
     match = regex.match(regex_pattern, agg)
     if match is not None:
         return (match.group(1), match.group(2))
@@ -36,16 +37,23 @@ def isolate_gv(gv):
         return (gv, None)
   
 def fTupleToStr(tuple):
-  retString = f"{tuple[0]}_{tuple[1].replace(".", "_").replace("(", "").replace(")", "")}"
+  retString = f"{tuple[0]}_{tuple[1].replace('.', '_').replace('(', '').replace(')', '')}"
   if (len(retString.split("_")) == 2):
     func, attr = retString.split("_")
     retString = f"{func}_GV0_{attr}"
   return retString
 
+def replace_aggregate(condition):
+    aggregate = grab_aggregates(condition)
+    if aggregate is not None and len(aggregate) > 0:
+        return fTupleToStr(aggregate[0])
+    else:
+        return fTupleToStr(("None", condition))
+
 def parse_query(query):
     # Initialize dictionary to store the parameters
-    phi_op = {"S": None, "N": None, "V": None, "F": None, "R": None, "H": None}
-    statements = {"select": None, "from": None, "group by": None, "suchthat": None, "having": None}
+    phi_op = {"S": None, "N": None, "V": None, "F": None, "R": None, "H": None, "W": None}
+    statements = {"select": "", "from": "", "where": "", "group by": "", "suchthat": "", "having": ""}
     
     # Split the query into individual conditions
     query_components = query.split("\n")
@@ -53,20 +61,23 @@ def parse_query(query):
     # Iterate over each condition in the query
     for condition in query_components:
         components = condition.split(" ")
-        if components[0] in statements:
-            statements[components[0]] = " ".join(components[1:])
-        elif (components[0] + " " + components[1]) in statements:
-            statements[components[0] + " " + components[1]] = " ".join(components[2:])
+        if components == [""]:
+            continue
+        if components[0].lower() in statements:
+            statements[components[0].lower()] = " ".join(components[1:])
+        elif (components[0].lower() + " " + components[1].lower()) in statements:
+            statements[components[0].lower() + " " + components[1].lower()] = " ".join(components[2:])
         else:
             raise ValueError("Invalid query format")
     
     # Extract the parameters from the conditions and store them in the dictionary
-    phi_op["S"] = list(map(lambda x: x.strip(), statements["select"].split(",")))
+    phi_op["S"] = list(map(lambda x: replace_aggregate(x.strip()), statements["select"].split(",")))
+    phi_op["W"] = statements["where"]
     phi_op["N"] = 1 + len(statements["group by"].split(":")[1].split(","))
     phi_op["V"] = list(map(lambda x: x.strip(), statements["group by"].split(":")[0].split(",")))
-    phi_op["F"] = list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))
+    phi_op["F"] = list(set(list(map(fTupleToStr, list(grab_aggregates(statements["select"]) + grab_aggregates(statements["having"]))))))
     phi_op["R"] = list(map(lambda x: x.strip(), statements["suchthat"].split(",")))
-    phi_op["H"] = list(map(lambda x: x.strip(), statements["having"].split(",")))
+    phi_op["H"] = statements["having"]
     
     # Return the dictionary of parameters
     return phi_op

@@ -1,0 +1,4 @@
+SELECT cust, prod, sum(X.quant), count(Y.month), max(quant)
+FROM sales
+GROUP BY cust, prod: X, Y
+SUCHTHAT X.state = 'NY', Y.state = 'NJ'\n

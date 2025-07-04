@@ -1,0 +1,4 @@
+select cust, prod, sum(X.quant), sum(Y.quant), sum(Z.quant)
+from sales
+group by cust, prod: X, Y, Z
+suchthat X.state = 'NY', Y.state = 'NJ', Z.state = 'CT'\n
