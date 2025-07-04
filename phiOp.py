@@ -61,10 +61,12 @@ def parse_query(query):
     # Iterate over each condition in the query
     for condition in query_components:
         components = condition.split(" ")
-        if components[0] in statements:
-            statements[components[0]] = " ".join(components[1:])
-        elif (components[0] + " " + components[1]) in statements:
-            statements[components[0] + " " + components[1]] = " ".join(components[2:])
+        if components == [""]:
+            continue
+        if components[0].lower() in statements:
+            statements[components[0].lower()] = " ".join(components[1:])
+        elif (components[0].lower() + " " + components[1].lower()) in statements:
+            statements[components[0].lower() + " " + components[1].lower()] = " ".join(components[2:])
         else:
             raise ValueError("Invalid query format")
     

@@ -13,11 +13,10 @@ suchthat R.Date > "96/05/31" AND R.Date < "96/09/01"
 having sum(R.Length)*3 > sum(Length) AND R.Length = max(R.Length)"""
 
 
-sales_query = """select prod, month, avg(x.quant), avg(y.quant)
-from sales
-where year = 2016
-group by prod, month: x, y
-suchthat x.prod = GV0.prod and x.month = GV0.month-1, y.prod = GV0.prod and y.month > GV0.month"""
+sales_query = """SELECT cust, prod, sum(X.quant), sum(Y.quant), sum(Z.quant)
+FROM sales
+GROUP BY cust, prod: X, Y, Z
+SUCHTHAT X.state = 'NY' AND X.quant > avg(quant), Y.state = 'NJ' AND Y.quant < avg(quant), Z.state = 'CT'\n"""
 
 queryParsed = phiOp.parse_query(sales_query)
 

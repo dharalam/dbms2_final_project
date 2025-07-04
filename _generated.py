@@ -27,11 +27,10 @@ def query():
     
     
     # THIS IS WHERE THE GENERATED CODE GOES!
-    phi = po.parse_query('''select prod, cust, sum(quant), sum(x.quant), sum(y.quant), avg(quant)
+    phi = po.parse_query('''select cust, prod, sum(X.quant), sum(Y.quant), sum(Z.quant)
 from sales
-group by prod, cust: x, y
-suchthat x.state = 'NY' and x.quant > 15, y.state = 'NJ'
-having sum(x.quant) > sum(y.quant) and sum(y.quant) >= avg(quant)''')
+group by cust, prod: X, Y, Z
+suchthat X.state = 'NY', Y.state = 'NJ', Z.state = 'CT'\n''')
     
     opInstance = o2p.op2python(phi)
     

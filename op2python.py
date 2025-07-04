@@ -24,7 +24,17 @@ class op2python:
     def split_gvs(self, gvs:list[str]):
             res = {}
             for expr in gvs:
-                agg, gv, col = expr.split("_")
+                split_expr = expr.split("_")
+                if len(split_expr) < 2:
+                    continue
+                if len(split_expr) == 2:
+                    agg = "None"
+                    gv = split_expr[-1]
+                    col = split_expr[-2]
+                else:
+                    agg = split_expr[0]
+                    gv = split_expr[1]
+                    col = split_expr[2]
                 if gv not in res:
                     res[gv] = [(agg, col)]
                 else:
@@ -181,16 +191,19 @@ class op2python:
         # Construct queries based on the Phi Operator structure
         # Should store each query as a string in the self.queries list
         # Will be executed in the body section of the generator
-                    
+                   
         gvs = self.split_gvs(list(set(self.F) | set(self.S))) # get full set of unique gvs with their aggs and columns from select and aggregate parameter 
         gvlist = list(gvs.keys())
         gvlist.sort(key=lambda x: 0 if x == "GV0" else 1)
-        to_select = list(map(self.convert_col_name, self.S))
+        to_select = list(map(self.convert_col_name, list(set(self.F) | set(self.S))))
+        final_select = list(map(self.convert_col_name, self.S))
         #print(gvlist)
 
         st_conds, st_kws, deps, condcols = self.parse_suchthat(self.R, gvlist) # gets the conditions and logical operators from the such that clause
         gvlist = self.dep_cardinality(deps)
         join_deps = self.join_deps(deps)
+        gvs = gvs | self.split_gvs(list(condcols))
+        
         
         where_conds = {"GV0": {} }
 
@@ -206,7 +219,7 @@ class op2python:
                     if val in df.columns:
                         val = "pl.col('" + val + "')"
                     where_query += f"(pl.col('{col}') {self.operator_map[op]} {val})"
-                    where_query += f" {self.operator_map[where_kws['GV0'][index]]} " if index < len(where_kws["GV0"]) else "" # makes sure we add the correct number of logical operators. It is order-based however.
+                    where_query += f" {self.operator_map[where_kws['GV0'][index].lower()]} " if index < len(where_kws["GV0"]) else "" # makes sure we add the correct number of logical operators. It is order-based however.
                     index+=1
             
             where_query += ")"
@@ -214,23 +227,24 @@ class op2python:
             df = eval(where_query)
 
 
-        #print(f"GVs: {gvs}")
-        #print(f"ST: {st_conds}")
-        #print(f"ST KW: {st_kws}")
-        #print(f"Where Conditions: {where_conds}")
-        #print(f"Dependencies: {deps}")
-        #print(f"Dep Cardinality: {gvlist}")
-        #print(f"Expanded Dependencies: {join_deps}")
-        #print(f"Columns in Conditions: {condcols}")
-        #print(f"Columns in Select: {to_select}")
+        print(f"GVs: {gvs}")
+        print(f"ST: {st_conds}")
+        print(f"ST KW: {st_kws}")
+        print(f"Where Conditions: {where_conds}")
+        print(f"Dependencies: {deps}")
+        print(f"Dep Cardinality: {gvlist}")
+        print(f"Expanded Dependencies: {join_deps}")
+        print(f"Columns in Conditions: {condcols}")
+        print(f"Columns in Select: {to_select}")
         
         simplified_joins = self.simplify_joins(join_deps)
-        #print(f"Simplified Joins: {simplified_joins}")
+        print(f"Simplified Joins: {simplified_joins}")
         
         
         
         for gv in gvlist:
             gvdf = df
+            print(f"Cur GV: {gv}")
 
             if gv in st_conds:
                 condict = st_conds[gv]
@@ -242,7 +256,7 @@ class op2python:
                     #print(f"JOINING: {dep} to {gv}")
                 #print(gvdf.columns)
                 curcols = set(list(gvdf.columns)) & (condcols | set(to_select) | set(list(map(self.extract_col_from_select, to_select))))
-                #print(f"Cols we care about pre-filter: {curcols}")
+                print(f"Cols we care about pre-filter: {curcols}")
                 
                 #print(f"{gv} GVDF pre-filter: {gvdf.head()}")
 
@@ -260,7 +274,7 @@ class op2python:
                     
                     for op, val in conds:
                         filter_query += f"(pl.col('{col}') {self.operator_map[op]} {val})"
-                        filter_query += f" {self.operator_map[gvkws[index]]} " if index < len(gvkws) else "" # makes sure we add the correct number of logical operators. It is order-based however.
+                        filter_query += f" {self.operator_map[gvkws[index].lower()]} " if index < len(gvkws) else "" # makes sure we add the correct number of logical operators. It is order-based however.
                         index+=1
                 
                 filter_query += ")"
@@ -274,12 +288,12 @@ class op2python:
             if gv not in self.gvs_in_queries: # if we haven't filtered this gv, we add a copy of df to the queries dict
                 self.queries[gv] = df
             
-            #print(f"Cols after filter: {gvdf.columns}")
+            print(f"Cols after filter: {gvdf.columns}")
             
             curcols = set(list(gvdf.columns)) & (condcols | set(to_select) | set(list(map(self.extract_col_from_select, to_select))))
-            #print(f"Cols we care about pre-groupby: {curcols}")
+            print(f"Cols we care about pre-groupby: {curcols}")
                 
-            groupby_query = f"gvdf.with_columns(["
+            groupby_query = f"gvdf.group_by({self.V}).agg(["
             
             for (i, (agg, col)) in enumerate(gvs[gv]):
                 groupby_query += f"pl.col('{col}')" 
@@ -287,7 +301,7 @@ class op2python:
                     alias = f".alias('{col}_{gv}')"
                 else:
                     groupby_query += f".{self.agg_map[agg]}()"
-                    groupby_query += f".over({self.V})"
+                    #groupby_query += f".over({self.V})"
                     alias = f".alias('{agg}_{gv}_{col}')" 
                 #print(f"Alias: {alias}")
                 groupby_query += alias
@@ -305,6 +319,8 @@ class op2python:
             self.queries[gv] = gvdf # restash
                 
             #print(f"{gv} GVDF: {gvdf.head()}")
+            print(f"Cols post-groupby: {gvdf.columns}")
+            print(f"Size of df: {gvdf.shape}")   
         
         if "GV0" in simplified_joins:
             frame = self.queries.pop("GV0") # start with GV0 for convenience and convention
@@ -312,42 +328,43 @@ class op2python:
             to_join = list(simplified_joins)
         else:
             to_join = list(simplified_joins)
-            frame = self.queries.pop(to_join.pop(0)) # start with an arbitrary GV, pop it from to_join
+            gv = to_join.pop(0)
+            frame = self.queries.pop(gv) # start with an arbitrary GV, pop it from to_join
         
         if len(self.queries) > 0:
             while len(to_join) > 0:
                 suff = to_join.pop(0)
+                print(f"Joining {suff} to {gv}")
                 other = self.queries.pop(suff)
-                frame = frame.join(other, how="inner", on=self.V, suffix=f"_{suff}").unique() # inner join and duplicate column names are suffixed with _{suff} to distinguish between GVs
+                frame = frame.join(other, how="left", on=self.V, suffix=f"_{suff}").unique() # inner join and duplicate column names are suffixed with _{suff} to distinguish between GVs
+                print("Join successful")
                 curcols = set(list(frame.columns)) & (condcols | set(to_select) | set(list(map(self.extract_col_from_select, to_select))))
+                print(curcols)
                 frame = frame.select(list(curcols))
-                
-        
+                gv = suff
        
-        
-        have = self.H.split(" ")
-        have = list(map(lambda x: po.fTupleToStr(po.grab_aggregates(x)[0]) if x not in self.operator_map else x, have))
-        have = " ".join(have)
-        hcconds, hckws, _, _ = self.parse_suchthat([have], gvlist)
-        having_query = "frame.filter("
-        index = 0 # global index for logical operators
-        for (i, (col, conds)) in enumerate(hcconds["GV0"].items()):
-            stillAgged = po.grab_aggregates(col) # sometimes there are cases that GV0 columns that are being aggregated are used in conditions
-            if stillAgged is not None and len(stillAgged) > 0:
-                col = stillAgged[0][1] # change the column name to reflect the actual col name
-            for op, val in conds:
-                if val in frame.columns:
-                    val = "pl.col('" + val + "')"
-                having_query += f"(pl.col('{col}') {self.operator_map[op]} {val})"
-                having_query += f" {self.operator_map[hckws['GV0'][index]]} " if index < len(hckws["GV0"]) else "" # makes sure we add the correct number of logical operators. It is order-based however.
-                index+=1
-        
-        having_query += ")"
-        
-        #print(having_query)
-        
-        frame = eval(having_query)
+        if self.H !="":
+            have = self.H.split(" ")
+            have = list(map(lambda x: po.fTupleToStr(po.grab_aggregates(x)[0]) if x not in self.operator_map else x, have))
+            have = " ".join(have)
+            hcconds, hckws, _, _ = self.parse_suchthat([have], gvlist)
+            having_query = "frame.filter("
+            index = 0 # global index for logical operators
+            for (i, (col, conds)) in enumerate(hcconds["GV0"].items()):
+                stillAgged = po.grab_aggregates(col) # sometimes there are cases that GV0 columns that are being aggregated are used in conditions
+                if stillAgged is not None and len(stillAgged) > 0:
+                    col = stillAgged[0][1] # change the column name to reflect the actual col name
+                for op, val in conds:
+                    if val in frame.columns:
+                        val = "pl.col('" + val + "')"
+                    having_query += f"(pl.col('{col}') {self.operator_map[op]} {val})"
+                    having_query += f" {self.operator_map[hckws['GV0'][index].lower()]} " if index < len(hckws["GV0"]) else "" # makes sure we add the correct number of logical operators. It is order-based however.
+                    index+=1
+            
+            having_query += ")"
+            #print(having_query)
+            frame = eval(having_query)
     
-        frame = frame.select(to_select).unique()
+        frame = frame.select(final_select).unique()
     
         return frame

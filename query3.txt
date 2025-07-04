@@ -1,0 +1,4 @@
+SELECT cust, prod, sum(X.quant), sum(Y.quant), sum(Z.quant)
+FROM sales
+GROUP BY cust, prod: X, Y, Z
+SUCHTHAT X.state = 'NY' AND X.quant > avg(quant), Y.state = 'NJ' AND Y.quant < avg(X.quant), Z.state = 'CT'\n
